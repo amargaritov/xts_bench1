@@ -5,6 +5,7 @@ import resource
 from io import StringIO ## for Python 3
 import time
 import sys
+from joblib import Parallel, delayed
 
 # create an S3 session
 s3 = boto3.resource('s3')
@@ -28,6 +29,7 @@ def mapper(event):
     src_keys    = event['keys']        # src_keys is a list of input file names for this mapper
     job_id      = event['jobId']
     mapper_id   = event['mapperId']
+    print(src_keys, mapper_id)
    
     # aggr 
     output = {}
@@ -69,6 +71,8 @@ def mapper(event):
     write_to_s3(dest_bucket, mapper_fname, json.dumps(output), metadata)
     return pret
 
+'''
+Mapper debug
 ev = {
    "srcBucket": "storage-module-test", 
    "destBucket": "storage-module-test", 
@@ -77,7 +81,7 @@ ev = {
    "mapperId": 0,
      }
 mapper(ev)
-
+'''
 
 
 
@@ -138,6 +142,8 @@ def reducer(event):
     write_to_s3(dest_bucket, fname, json.dumps(results), metadata)
     return pret
 
+'''
+Reducer debug
 ev = {
     "srcBucket": "storage-module-test", 
     "destBucket": "storage-module-test",
@@ -147,3 +153,44 @@ ev = {
     "reducerId": 0, 
 }
 reducer(ev)
+'''
+
+
+NUM_MAPPERS = 64 # can't be more than 2215 
+
+def driver():
+    map_ev = {
+       "srcBucket": "storage-module-test", 
+       "destBucket": "storage-module-test", 
+       "keys": ["part-00000"],
+       "jobId": "0",
+       "mapperId": 0,
+         }
+    map_tasks = [] 
+    for i in range(NUM_MAPPERS):
+        map_tasks.append(map_ev.copy())
+    for i in range(NUM_MAPPERS):
+        print(i)
+        map_tasks[i]['keys'] = ["part-" + str(i).zfill(5)]
+        map_tasks[i]['mapperId'] = i
+
+    # parallel running of mappers fails in pickle, probably due to very large output
+#    Parallel(n_jobs=2)(delayed(mapper)(i) for i in map_tasks)
+    
+    for task in map_tasks:
+        mapper(task)
+
+    reduce_input_keys = ["map_" + str(x) for x in range(NUM_MAPPERS)]
+
+    ev = {
+        "srcBucket": "storage-module-test", 
+        "destBucket": "storage-module-test",
+        "keys": reduce_input_keys,
+        "nReducers": 1,
+        "jobId": "0",
+        "reducerId": 0, 
+        }
+    reducer(ev)
+
+driver()
+
