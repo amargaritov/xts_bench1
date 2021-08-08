@@ -1,21 +1,9 @@
-'''
-Python mapper function
-
-Copyright 2016 Amazon.com, Inc. or its affiliates. All Rights Reserved.
-SPDX-License-Identifier: MIT-0
-'''
-
 import boto3
 import json
 import random
 import resource
-try:
-    from StringIO import StringIO ## for Python 2
-except ImportError:
-    from io import StringIO ## for Python 3
+from io import StringIO ## for Python 3
 import time
-
-import sys
 
 # create an S3 session
 s3 = boto3.resource('s3')
@@ -69,7 +57,8 @@ def mapper(event):
     #s3DownloadTime = 0
     #totalProcessingTime = 0 
     pret = [len(src_keys), line_count, time_in_secs, err]
-    mapper_fname = "%s/%s%s" % (job_id, OUTPUT_MAPPER_PREFIX, mapper_id) 
+    mapper_fname = "%sjob_%s/map_%s" % (OUTPUT_MAPPER_PREFIX, job_id, mapper_id) 
+    print(mapper_fname)
     metadata = {
                     "linecount":  '%s' % line_count,
                     "processingtime": '%s' % time_in_secs,
@@ -79,27 +68,14 @@ def mapper(event):
     write_to_s3(dest_bucket, mapper_fname, json.dumps(output), metadata)
     return pret
 
-
-
-'''
 ev = {
    "srcBucket": "storage-module-test", 
+   "destBucket": "storage-module-test", 
    "keys": ["part-00000"],
-   "jobId": "pyjob",
-   "mapperId": 1,
-   "destBucket": "storage-module-test"
+   "jobId": "0",
+   "mapperId": 0,
      }
 mapper(ev)
-'''
-'''
-Python reducer function
-
-Copyright 2016 Amazon.com, Inc. or its affiliates. All Rights Reserved.
-SPDX-License-Identifier: MIT-0
-'''
-
-# constants
-TASK_MAPPER_PREFIX = "task/mapper/";
 
 def reducer(event):
     
@@ -107,10 +83,9 @@ def reducer(event):
     
     dest_bucket = event['destBucket']  # s3 bucket where the mapper will write the result
     src_bucket  = event['srcBucket']   # s3 bucket where the mapper will search for input files
-    reducer_keys    = event['keys']    # reducer_keys is a list of input file names for this mapper
+    reducer_keys = event['keys']    # reducer_keys is a list of input file names for this mapper
     job_id = event['jobId']
     r_id = event['reducerId']
-    step_id = event['stepId']
     n_reducers = event['nReducers']
     
     # aggr 
@@ -123,7 +98,7 @@ def reducer(event):
     for key in reducer_keys:
         key = INPUT_REDUCER_PREFIX + key
         response = s3_client.get_object(Bucket=job_bucket, Key=key)
-        contents = response['Body'].read()
+        contents = response['Body'].read().decode("utf-8")
 
         try:
             for srcIp, val in json.loads(contents).iteritems():
@@ -131,21 +106,21 @@ def reducer(event):
                 if srcIp not in results:
                     results[srcIp] = 0
                 results[srcIp] += float(val)
-        except Exception, e:
-            print e
+        except getopt.GetoptError as e:
+            print (e)
 
     time_in_secs = (time.time() - start_time)
     #timeTaken = time_in_secs * 1000000000 # in 10^9 
     #s3DownloadTime = 0
     #totalProcessingTime = 0 
     pret = [len(reducer_keys), line_count, time_in_secs]
-    print "Reducer ouputput", pret
+    print ("Reducer ouputput", pret)
 
     if n_reducers == 1:
         # Last reducer file, final result
-        fname = "%s/result" % job_id
+        fname = "%sjob_%s/result" % (OUTPUT_REDUCER_PREFIX, job_id)
     else:
-        fname = "%s/%s%s/%s" % (job_id, TASK_REDUCER_PREFIX, step_id, r_id)
+        fname = "%sjob_%s/reducer_%s" % (OUTPUT_REDUCER_PREFIX, job_id, r_id)
     
     metadata = {
                     "linecount":  '%s' % line_count,
@@ -158,13 +133,12 @@ def reducer(event):
 
 '''
 ev = {
-    "bucket": "-useast-1",
-    "jobBucket": "-useast-1",
-    "jobId": "py-biglambda-1node-3",
+    "srcBucket": "storage-module-test", 
+    "destBucket": "storage-module-test",
+    "keys": ["0"],
     "nReducers": 1,
-    "keys": ["py-biglambda-1node-3/task/mapper/1"],
-    "reducerId": 1, 
-    "stepId" : 1
+    "jobId": "0",
+    "reducerId": 0, 
 }
-lambda_handler(ev, {});
+reducer(ev)
 '''
