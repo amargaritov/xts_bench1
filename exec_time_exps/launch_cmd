@@ -1,0 +1,2 @@
+# before running the first time, download the whole dataset locally using the script in this dir
+cat /disk/local/data/text/1node/uservisits/part-00000 | python3 ./measure_mapper_exectime.py

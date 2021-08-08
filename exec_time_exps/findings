@@ -1,0 +1,8 @@
+1. If the dataset is located locally (not in S3), one default 'part' file (e.g. part-0000) of the input is processed in 1.02s. (part-0000 is about 123MB and has 759578 lines). 
+
+
+
+
+2. There are 203 files in total, almost all are the same size as part-00000. As a result, to process the whole dataset by mapper stage in 100ms, one needs 
+	a) to run approx. 203 * 10 = 2030 mappers simultaneously
+	b) if running on a machine with parallelism degree 64, each input file should be approx 12MB; the dataset size should be reduced to 12MB * 65 = 768MB

@@ -1,0 +1,15 @@
+# If on a Cloulab machine
+#sudo mkdir /disk
+#sudo /usr/local/etc/emulab/mkextrafs.pl /disk
+#sudo chmod -R 777 /disk/local
+
+
+DATA_DIR=/disk/local/data/text/1node
+
+mkdir -p $DATA_DIR 
+
+pushd $DATA_DIR
+aws s3 sync s3://big-data-benchmark/pavlo/text/1nodes .
+popd
+
+

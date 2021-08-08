@@ -1,0 +1,13 @@
+sudo apt-get update 
+sudo apt-get upgrade 
+sudo apt-get install vim python-pip
+sudo apt-get install python3-pip
+sudo pip install awscli
+sudo pip install awscli
+sudo pip install boto
+sudo pip install boto3
+sudo pip install aws_xray_sdk
+sudo pip3 install boto
+sudo apt-get install python3-pip
+sudo pip3 install boto 
+sudo pip3 install boto3
