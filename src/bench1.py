@@ -4,6 +4,7 @@ import random
 import resource
 from io import StringIO ## for Python 3
 import time
+import sys
 
 # create an S3 session
 s3 = boto3.resource('s3')
@@ -11,9 +12,9 @@ s3_client = boto3.client('s3')
 
 # constants
 INPUT_MAPPER_PREFIX = "artemiy/input/"
-OUTPUT_MAPPER_PREFIX = "artemiy/task/mapper/";
-INPUT_REDUCER_PREFEFIX = OUTPUT_MAPPER_PREFIX
-OUTPUT_REDUCER_PREFIX = "artemiy/task/reducer/";
+OUTPUT_MAPPER_PREFIX = "artemiy/task/mapper/"
+INPUT_REDUCER_PREFIX = OUTPUT_MAPPER_PREFIX
+OUTPUT_REDUCER_PREFIX = "artemiy/task/reducer/"
 
 def write_to_s3(bucket, key, data, metadata):
     s3.Bucket(bucket).put_object(Key=key, Body=data, Metadata=metadata)
@@ -77,6 +78,10 @@ ev = {
      }
 mapper(ev)
 
+
+
+
+
 def reducer(event):
     
     start_time = time.time()
@@ -96,17 +101,19 @@ def reducer(event):
 
     # Download and process all keys
     for key in reducer_keys:
-        key = INPUT_REDUCER_PREFIX + key
-        response = s3_client.get_object(Bucket=job_bucket, Key=key)
+        key = INPUT_REDUCER_PREFIX + "job_" + job_id + "/" + key
+        print(key)
+        response = s3_client.get_object(Bucket=src_bucket, Key=key)
         contents = response['Body'].read().decode("utf-8")
 
         try:
-            for srcIp, val in json.loads(contents).iteritems():
+            for srcIp, val in json.loads(contents).items():
                 line_count +=1
                 if srcIp not in results:
                     results[srcIp] = 0
                 results[srcIp] += float(val)
-        except getopt.GetoptError as e:
+        except:
+            e = sys.exc_info()[0]
             print (e)
 
     time_in_secs = (time.time() - start_time)
@@ -128,17 +135,15 @@ def reducer(event):
                     "memoryUsage": '%s' % resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
                }
 
-    write_to_s3(job_bucket, fname, json.dumps(results), metadata)
+    write_to_s3(dest_bucket, fname, json.dumps(results), metadata)
     return pret
 
-'''
 ev = {
     "srcBucket": "storage-module-test", 
     "destBucket": "storage-module-test",
-    "keys": ["0"],
+    "keys": ["map_0"],
     "nReducers": 1,
     "jobId": "0",
     "reducerId": 0, 
 }
 reducer(ev)
-'''
