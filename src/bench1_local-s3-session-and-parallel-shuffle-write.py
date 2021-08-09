@@ -37,6 +37,10 @@ def mapper(event):
     err = ''
 
     # create an S3 session
+    # Note that this can be done once for all mappers/reducers as part fo the
+    # GreeterService object init by setting appropriate transferTime
+    # If S3 session is initialized locally by each mapper/reducer, it can considerably i
+    # increase their compute time. Ask Dmitrii and Artemiy for mode detail
     s3 = boto3.resource('s3')
     s3_client = boto3.client('s3')
 
@@ -120,6 +124,10 @@ def reducer(event):
     line_count = 0
 
     # create an S3 session
+    # Note that this can be done once for all mappers/reducers as part fo the
+    # GreeterService object init by setting appropriate transferTime
+    # If S3 session is initialized locally by each mapper/reducer, it can considerably i
+    # increase their compute time. Ask Dmitrii and Artemiy for mode detail
     s3 = boto3.resource('s3')
     s3_client = boto3.client('s3')
 
