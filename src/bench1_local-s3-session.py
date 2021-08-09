@@ -185,8 +185,8 @@ reducer(ev)
 '''
 
 
-NUM_MAPPERS = 8 # can't be more than 2215 
-NUM_REDUCERS = 4 # must be power of 2 and smaller than NUM_MAPPERS 
+NUM_MAPPERS = 64 # can't be more than 2215 
+NUM_REDUCERS = 16 # must be power of 2 and smaller than NUM_MAPPERS 
 
 def driver():
     map_ev = {
