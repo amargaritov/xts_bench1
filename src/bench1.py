@@ -29,7 +29,8 @@ def mapper(event):
     src_keys    = event['keys']        # src_keys is a list of input file names for this mapper
     job_id      = event['jobId']
     mapper_id   = event['mapperId']
-    print(src_keys, mapper_id)
+    n_reducers  = event['nReducers']   # must be power of 2
+#    print(src_keys, mapper_id)
    
     # aggr 
     output = {}
@@ -41,7 +42,9 @@ def mapper(event):
     for key in src_keys:
         key = INPUT_MAPPER_PREFIX + key
         response = s3_client.get_object(Bucket=src_bucket, Key=key)
+        start_time = time.time()
         contents = response['Body'].read().decode("utf-8") 
+
     
         for line in contents.split('\n')[:-1]:
             line_count +=1
@@ -55,20 +58,33 @@ def mapper(event):
 #                print (e)
                 err += '%s' % e
 
+    shuffle_output = []
+    for i in range(n_reducers):
+        reducer_output = {}
+        shuffle_output.append(reducer_output)
+    for srcIp in output.keys():
+        reducer_num = hash(srcIp) & (n_reducers - 1)
+        shuffle_output[reducer_num][srcIp] = output[srcIp]
+
     time_in_secs = (time.time() - start_time)
     #timeTaken = time_in_secs * 1000000000 # in 10^9 
     #s3DownloadTime = 0
     #totalProcessingTime = 0 
     pret = [len(src_keys), line_count, time_in_secs, err]
-    mapper_fname = "%sjob_%s/map_%s" % (OUTPUT_MAPPER_PREFIX, job_id, mapper_id) 
-    print(mapper_fname)
-    metadata = {
-                    "linecount":  '%s' % line_count,
-                    "processingtime": '%s' % time_in_secs,
-                    "memoryUsage": '%s' % resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
-               }
-    print ("metadata", metadata)
-    write_to_s3(dest_bucket, mapper_fname, json.dumps(output), metadata)
+    print("mapper" + str(mapper_id), pret)
+
+        
+    for to_reducer_id in range(n_reducers):
+        mapper_fname = "%sjob_%s/shuffle_%s/map_%s" % (OUTPUT_MAPPER_PREFIX, job_id, to_reducer_id, mapper_id) 
+#        print(mapper_fname)
+        metadata = {
+                        "linecount":  '%s' % line_count,
+                        "processingtime": '%s' % time_in_secs,
+                        "memoryUsage": '%s' % resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+                   }
+#        print ("metadata", metadata)
+        write_to_s3(dest_bucket, mapper_fname, json.dumps(shuffle_output[to_reducer_id]), metadata)
+
     return pret
 
 '''
@@ -102,14 +118,17 @@ def reducer(event):
     line_count = 0
 
     # INPUT JSON => OUTPUT JSON
+    time_in_secs = 0
+    start_time = time.time()
 
     # Download and process all keys
     for key in reducer_keys:
-        key = INPUT_REDUCER_PREFIX + "job_" + job_id + "/" + key
-        print(key)
+        key = INPUT_REDUCER_PREFIX + "job_" + job_id + "/shuffle_" + str(r_id) + "/" + key
+#        print(key)
         response = s3_client.get_object(Bucket=src_bucket, Key=key)
+        start_time = time.time()
         contents = response['Body'].read().decode("utf-8")
-
+        
         try:
             for srcIp, val in json.loads(contents).items():
                 line_count +=1
@@ -120,12 +139,13 @@ def reducer(event):
             e = sys.exc_info()[0]
             print (e)
 
-    time_in_secs = (time.time() - start_time)
+        time_in_secs += (time.time() - start_time)
+
     #timeTaken = time_in_secs * 1000000000 # in 10^9 
     #s3DownloadTime = 0
     #totalProcessingTime = 0 
     pret = [len(reducer_keys), line_count, time_in_secs]
-    print ("Reducer ouputput", pret)
+    print ("Reducer" + str(r_id), pret)
 
     if n_reducers == 1:
         # Last reducer file, final result
@@ -157,6 +177,7 @@ reducer(ev)
 
 
 NUM_MAPPERS = 64 # can't be more than 2215 
+NUM_REDUCERS = 16 # must be power of 2 and smaller than NUM_MAPPERS 
 
 def driver():
     map_ev = {
@@ -165,12 +186,11 @@ def driver():
        "keys": ["part-00000"],
        "jobId": "0",
        "mapperId": 0,
+       "nReducers": NUM_REDUCERS,
          }
     map_tasks = [] 
     for i in range(NUM_MAPPERS):
         map_tasks.append(map_ev.copy())
-    for i in range(NUM_MAPPERS):
-        print(i)
         map_tasks[i]['keys'] = ["part-" + str(i).zfill(5)]
         map_tasks[i]['mapperId'] = i
 
@@ -180,17 +200,25 @@ def driver():
     for task in map_tasks:
         mapper(task)
 
-    reduce_input_keys = ["map_" + str(x) for x in range(NUM_MAPPERS)]
 
-    ev = {
+    reduce_input_keys = ["map_" + str(x) for x in range(NUM_MAPPERS)] # this list is the same for 
+                                                                      # all reducers as each of them has to read 
+                                                                      # a shuffle result from each mapper
+    reduce_ev = {
         "srcBucket": "storage-module-test", 
         "destBucket": "storage-module-test",
         "keys": reduce_input_keys,
-        "nReducers": 1,
+        "nReducers": NUM_REDUCERS,
         "jobId": "0",
         "reducerId": 0, 
         }
-    reducer(ev)
+    reducer_tasks = [] 
+    for i in range(NUM_REDUCERS):
+        reducer_tasks.append(reduce_ev.copy())
+        reducer_tasks[i]['reducerId'] = i
+
+    for task in reducer_tasks:
+        reducer(task)
 
 driver()
 
